@@ -44,7 +44,8 @@ def run_agents(api_key, cmd):
         temperature=0.3,
         response_format={"type": "json_object"}
     )
-    data = json.loads(res.choices.message.content)
+    raw_content = res.choices[0].message.content
+    data = json.loads(raw_content)
     st.session_state.lifestyle_mode = data.get("lifestyle_mode", st.session_state.lifestyle_mode)
     if data.get("heal_network", False):
         for d in st.session_state.devices:

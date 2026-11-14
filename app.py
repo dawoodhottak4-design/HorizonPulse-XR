@@ -169,7 +169,7 @@ def run_multi_agent_pipeline(api_key, user_command):
         response_format={"type": "json_object"}
     )
 
-    result = json.loads(completion.choices.message.content)
+    result = json.loads(completion.choices[0].message.content)
     st.session_state.lifestyle_mode = result.get("lifestyle_mode", st.session_state.lifestyle_mode)
 
     if result.get("heal_network", False):

@@ -59,17 +59,12 @@ st.markdown("""
     .tag-intent { background: rgba(0, 129, 251, 0.22); color: #60a5fa; border: 1px solid #0081FB; }
     .tag-telecom { background: rgba(0, 245, 212, 0.18); color: #2dd4bf; border: 1px solid #00f5d4; }
     .tag-lifestyle { background: rgba(192, 132, 252, 0.2); color: #e879f9; border: 1px solid #c084fc; }
-    .stButton > button {
+    .stButton button {
         border-radius: 999px !important;
         border: 1px solid rgba(0, 129, 251, 0.5) !important;
         background: linear-gradient(90deg, #0064e0, #0081FB) !important;
         color: white !important;
         font-weight: 600 !important;
-        transition: all 0.25s ease !important;
-    }
-    .stButton > button:hover {
-        box-shadow: 0 0 20px rgba(0, 129, 251, 0.65) !important;
-        transform: translateY(-1px);
     }
     h1, h2, h3 {
         background: linear-gradient(90deg, #ffffff, #38bdf8, #00f5d4);
@@ -182,7 +177,23 @@ def run_multi_agent_pipeline(api_key, user_command):
 # 4. META HORIZON OS 3D SPATIAL ENVIRONMENT
 # ==========================================
 def get_node_visuals(ping_val):
-    if ping_val in range(0, 30) or ping_val 
+    p_int = int(ping_val)
+    if p_int in range(0, 31):
+        return "#0081FB", "#00f5d4", "2400", "🔵"
+    elif p_int in range(31, 91):
+        return "#f59e0b", "#fde047", "900", "🟡"
+    else:
+        return "#ff0055", "#ff758f", "300", "🔴"
+
+def render_horizon_spatial_scene(devices, mode):
+    orbs_html = ""
+    for name, data in devices.items():
+        ping = float(data["ping"])
+        color, ring_color, dur, _ = get_node_visuals(ping)
+        pos = data["pos"]
+        label = f"{name.replace('_', ' ')}\\n{ping} ms | {data['qos']}"
+        orbs_html += f"""
+        
             <a-sphere radius="0.19" color="{color}"
                 material="emissive: {color}; emissiveIntensity: 0.75; opacity: 0.9; transparent: true"
                 animation="property: scale; to: 1.14 1.14 1.14; dir: alternate; dur: {dur}; loop: true">
@@ -210,3 +221,4 @@ def get_node_visuals(ping_val):
 
             <a-curvedimage position="0 2.35 -3.1" height="0.52" radius="3.4" theta-length="58" rotation="0 151 0"
                 color="#0081FB" opacity="0.28">
+            </a-curvedimage>

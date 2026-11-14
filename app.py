@@ -6,6 +6,16 @@ import numpy as np
 import json
 import random
 
+# Safe tag builders to prevent browser copy-paste stripping
+LT = chr(60)
+GT = chr(62)
+
+def tag(name, attrs="", content="", self_closing=False):
+    space = " " if attrs else ""
+    if self_closing:
+        return f"{LT}{name}{space}{attrs}/{GT}"
+    return f"{LT}{name}{space}{attrs}{GT}{content}{LT}/{name}{GT}"
+
 # ==========================================
 # 1. META HORIZON OS SPATIAL UI STYLING
 # ==========================================
@@ -16,8 +26,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown("""
-<style>
+css_rules = """
     .stApp {
         background: radial-gradient(circle at 15% 15%, #002b5b 0%, #050a18 45%, #02040a 100%);
         color: #f1f5f9;
@@ -72,8 +81,8 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         font-weight: 700 !important;
     }
-</style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(tag("style", content=css_rules), unsafe_allow_html=True)
 
 # ==========================================
 # 2. TELECOM TELEMETRY & SESSION STATE
@@ -186,39 +195,23 @@ def get_node_visuals(ping_val):
         return "#ff0055", "#ff758f", "300", "🔴"
 
 def render_horizon_spatial_scene(devices, mode):
-    orbs_html = ""
+    orbs_list = []
     for name, data in devices.items():
         ping = float(data["ping"])
         color, ring_color, dur, _ = get_node_visuals(ping)
         pos = data["pos"]
         label = f"{name.replace('_', ' ')}\\n{ping} ms | {data['qos']}"
-        orbs_html += f"""
-        
-            <a-sphere radius="0.19" color="{color}"
-                material="emissive: {color}; emissiveIntensity: 0.75; opacity: 0.9; transparent: true"
-                animation="property: scale; to: 1.14 1.14 1.14; dir: alternate; dur: {dur}; loop: true">
-            </a-sphere>
-            <a-torus color="{ring_color}" radius="0.28" radius-tubular="0.008" rotation="75 0 0"
-                animation="property: rotation; to: 75 360 0; dur: 5000; loop: true; easing: linear">
-            </a-torus>
-            <a-plane position="0 0.42 0" width="1.15" height="0.32" color="#081226" opacity="0.82"></a-plane>
-            <a-text value="{label}" align="center" position="0 0.42 0.01" scale="0.55 0.55 0.55" color="#e0f2fe"></a-text>
-        
-        """
+        sphere = tag("a-sphere", f'radius="0.19" color="{color}" material="emissive: {color}; emissiveIntensity: 0.75; opacity: 0.9; transparent: true" animation="property: scale; to: 1.14 1.14 1.14; dir: alternate; dur: {dur}; loop: true"')
+        torus = tag("a-torus", f'color="{ring_color}" radius="0.28" radius-tubular="0.008" rotation="75 0 0" animation="property: rotation; to: 75 360 0; dur: 5000; loop: true; easing: linear"')
+        plane = tag("a-plane", 'position="0 0.42 0" width="1.15" height="0.32" color="#081226" opacity="0.82"')
+        txt = tag("a-text", f'value="{label}" align="center" position="0 0.42 0.01" scale="0.55 0.55 0.55" color="#e0f2fe"')
+        orbs_list.append(tag("a-entity", f'position="{pos}"', sphere + torus + plane + txt))
 
-    html_code = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <script src="https://aframe.io"></script>
-    </head>
-    <body style="margin: 0; overflow: hidden; border-radius: 20px; border: 1px solid rgba(0,129,251,0.4);">
-        <a-scene embedded style="height: 410px; width: 100%;" webxr="optionalFeatures: hand-tracking, local-floor;">
-            <a-sky color="#030816"></a-sky>
-            <a-circle position="0 0 -2.5" rotation="-90 0 0" radius="4.5" color="#071329" opacity="0.85"></a-circle>
-            <a-ring position="0 0.01 -2.5" rotation="-90 0 0" radius-inner="2.8" radius-outer="2.83" color="#0081FB" opacity="0.6"></a-ring>
-            <a-ring position="0 0.01 -2.5" rotation="-90 0 0" radius-inner="4.2" radius-outer="4.23" color="#00f5d4" opacity="0.4"></a-ring>
-
-            <a-curvedimage position="0 2.35 -3.1" height="0.52" radius="3.4" theta-length="58" rotation="0 151 0"
-                color="#0081FB" opacity="0.28">
-            </a-curvedimage>
+    scene_items = [
+        tag("a-sky", 'color="#030816"'),
+        tag("a-circle", 'position="0 0 -2.5" rotation="-90 0 0" radius="4.5" color="#071329" opacity="0.85"'),
+        tag("a-ring", 'position="0 0.01 -2.5" rotation="-90 0 0" radius-inner="2.8" radius-outer="2.83" color="#0081FB" opacity="0.6"'),
+        tag("a-ring", 'position="0 0.01 -2.5" rotation="-90 0 0" radius-inner="4.2" radius-outer="4.23" color="#00f5d4" opacity="0.4"'),
+        tag("a-curvedimage", 'position="0 2.35 -3.1" height="0.52" radius="3.4" theta-length="58" rotation="0 151 0" color="#0081FB" opacity="0.28"'),
+        tag("a-text", f'value="HORIZON PULSE XR  |  {mode.upper()}" position="0 2.35 -2.95" align="center" color="#ffffff" width="4.2"'),
+        tag("a-entity", 'line="start: 0 1.65 -3.0; end: -1.45 1.45 -2.4; color: #0081FB; opacity: 0.7"'),

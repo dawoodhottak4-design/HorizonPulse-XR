@@ -18,14 +18,11 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Meta Horizon OS Deep Spatial Void & Signature Blue/Cyan Glow */
     .stApp {
         background: radial-gradient(circle at 15% 15%, #002b5b 0%, #050a18 45%, #02040a 100%);
         color: #f1f5f9;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-
-    /* Meta Quest / Horizon OS Frosted Spatial Panel */
     .horizon-panel {
         background: linear-gradient(145deg, rgba(16, 28, 54, 0.72), rgba(8, 15, 32, 0.85));
         backdrop-filter: blur(20px);
@@ -37,8 +34,6 @@ st.markdown("""
         margin-bottom: 16px;
         box-shadow: 0 12px 40px rgba(0, 129, 251, 0.15), inset 0 0 20px rgba(0, 129, 251, 0.05);
     }
-
-    /* Meta Infinity Pill Badge */
     .meta-pill {
         display: inline-flex;
         align-items: center;
@@ -52,8 +47,6 @@ st.markdown("""
         font-weight: 600;
         letter-spacing: 0.5px;
     }
-
-    /* Agent Pills */
     .agent-tag {
         display: inline-block;
         padding: 4px 12px;
@@ -66,8 +59,6 @@ st.markdown("""
     .tag-intent { background: rgba(0, 129, 251, 0.22); color: #60a5fa; border: 1px solid #0081FB; }
     .tag-telecom { background: rgba(0, 245, 212, 0.18); color: #2dd4bf; border: 1px solid #00f5d4; }
     .tag-lifestyle { background: rgba(192, 132, 252, 0.2); color: #e879f9; border: 1px solid #c084fc; }
-
-    /* Custom Buttons matching Horizon OS */
     .stButton > button {
         border-radius: 999px !important;
         border: 1px solid rgba(0, 129, 251, 0.5) !important;
@@ -80,7 +71,6 @@ st.markdown("""
         box-shadow: 0 0 20px rgba(0, 129, 251, 0.65) !important;
         transform: translateY(-1px);
     }
-
     h1, h2, h3 {
         background: linear-gradient(90deg, #ffffff, #38bdf8, #00f5d4);
         -webkit-background-clip: text;
@@ -191,21 +181,15 @@ def run_multi_agent_pipeline(api_key, user_command):
 # ==========================================
 # 4. META HORIZON OS 3D SPATIAL ENVIRONMENT
 # ==========================================
-def render_horizon_spatial_scene(devices, mode):
-    orbs_html = ""
-    for name, data in devices.items():
-        ping = data["ping"]
-        if ping 
-            <!-- Core Spatial Node -->
+def get_node_visuals(ping_val):
+    if ping_val in range(0, 30) or ping_val 
             <a-sphere radius="0.19" color="{color}"
                 material="emissive: {color}; emissiveIntensity: 0.75; opacity: 0.9; transparent: true"
                 animation="property: scale; to: 1.14 1.14 1.14; dir: alternate; dur: {dur}; loop: true">
             </a-sphere>
-            <!-- Gyroscopic Horizon Ring -->
             <a-torus color="{ring_color}" radius="0.28" radius-tubular="0.008" rotation="75 0 0"
                 animation="property: rotation; to: 75 360 0; dur: 5000; loop: true; easing: linear">
             </a-torus>
-            <!-- Floating Spatial Label -->
             <a-plane position="0 0.42 0" width="1.15" height="0.32" color="#081226" opacity="0.82"></a-plane>
             <a-text value="{label}" align="center" position="0 0.42 0.01" scale="0.55 0.55 0.55" color="#e0f2fe"></a-text>
         
@@ -220,5 +204,9 @@ def render_horizon_spatial_scene(devices, mode):
     <body style="margin: 0; overflow: hidden; border-radius: 20px; border: 1px solid rgba(0,129,251,0.4);">
         <a-scene embedded style="height: 410px; width: 100%;" webxr="optionalFeatures: hand-tracking, local-floor;">
             <a-sky color="#030816"></a-sky>
-            
-            <!-- Horizon Spatial Floor Grid -->
+            <a-circle position="0 0 -2.5" rotation="-90 0 0" radius="4.5" color="#071329" opacity="0.85"></a-circle>
+            <a-ring position="0 0.01 -2.5" rotation="-90 0 0" radius-inner="2.8" radius-outer="2.83" color="#0081FB" opacity="0.6"></a-ring>
+            <a-ring position="0 0.01 -2.5" rotation="-90 0 0" radius-inner="4.2" radius-outer="4.23" color="#00f5d4" opacity="0.4"></a-ring>
+
+            <a-curvedimage position="0 2.35 -3.1" height="0.52" radius="3.4" theta-length="58" rotation="0 151 0"
+                color="#0081FB" opacity="0.28">

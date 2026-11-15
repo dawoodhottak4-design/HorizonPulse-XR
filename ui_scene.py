@@ -24,19 +24,15 @@ def inject_horizon_css():
     css += ".meta-pill { display: inline-block; background: linear-gradient(90deg, rgba(0, 129, 251, 0.35), rgba(0, 245, 212, 0.25)); border: 1px solid #0081FB; color: #7dd3fc; padding: 5px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }"
     css += ".agent-tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; margin-bottom: 5px; background: rgba(0, 245, 212, 0.2); color: #2dd4bf; border: 1px solid #00f5d4; }"
     css += "h1, h2, h3 { color: #38bdf8 !important; }"
-    css += "div.stButton > button { background: linear-gradient(90deg, #0064e0, #0081FB) !important; color: #ffffff !important; border: 1px solid #00f5d4 !important; border-radius: 999px !important; font-weight: 700 !important; }"
+    css += "div.stButton button { background: linear-gradient(90deg, #0064e0, #0081FB) !important; color: #ffffff !important; border: 1px solid #00f5d4 !important; border-radius: 999px !important; font-weight: 700 !important; }"
     st.markdown(tag("style", content=css), unsafe_allow_html=True)
 
 def render_horizon_spatial_scene(devices, mode):
     nodes_payload = []
-    core_node = {"x": 0.0, "y": 1.65, "z": -3.0}
-
     for idx, (name, data) in enumerate(devices.items()):
         ping = float(data["ping"])
         color, ring_color, _, _ = get_node_visuals(ping)
         cx, cy, cz = (float(v) for v in data["pos"].split())
-        if idx == 0:
-            core_node = {"x": cx, "y": cy, "z": cz}
         nodes_payload.append({
             "name": name.replace("_", " "),
             "ping": ping,
@@ -45,175 +41,201 @@ def render_horizon_spatial_scene(devices, mode):
             "ring": ring_color,
             "x": cx,
             "y": cy,
-            "z": cz
+            "z": cz + 2.5
         })
 
     nodes_json = json.dumps(nodes_payload)
-    core_json = json.dumps(core_node)
     mode_upper = mode.upper()
 
     js_code = f"""
-    const nodesData = {nodes_json};
-    const coreData = {core_json};
+    const nodes = {nodes_json};
     const canvas = document.getElementById('xrCanvas');
-    const renderer = new THREE.WebGLRenderer({{ canvas: canvas, antialias: true, alpha: true }});
-    renderer.setSize(window.innerWidth, 410);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.xr.enabled = true;
+    const ctx = canvas.getContext('2d');
 
-    const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x030816, 0.06);
+    function resize() {{
+        canvas.width = canvas.parentElement.clientWidth || 700;
+        canvas.height = 410;
+    }}
+    resize();
+    window.addEventListener('resize', resize);
 
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / 410, 0.1, 100);
-    camera.position.set(0, 1.8, 0.8);
-    camera.lookAt(0, 1.35, -2.5);
-
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.1);
-    scene.add(ambientLight);
-    const pointLight = new THREE.PointLight(0x0081FB, 3.0, 20);
-    pointLight.position.set(0, 3, -2);
-    scene.add(pointLight);
-
-    const gridHelper = new THREE.GridHelper(10, 24, 0x0081FB, 0x0b1d3a);
-    gridHelper.position.set(0, 0, -2.5);
-    scene.add(gridHelper);
-
-    const ringGeo = new THREE.RingGeometry(2.6, 2.68, 64);
-    const ringMat = new THREE.MeshBasicMaterial({{ color: 0x00f5d4, side: THREE.DoubleSide, transparent: true, opacity: 0.7 }});
-    const floorRing = new THREE.Mesh(ringGeo, ringMat);
-    floorRing.rotation.x = Math.PI / 2;
-    floorRing.position.set(0, 0.02, -2.5);
-    scene.add(floorRing);
-
-    const orbMeshes = [];
-    const pulses = [];
-    const corePos = new THREE.Vector3(coreData.x, coreData.y, coreData.z);
-
-    nodesData.forEach((nd, i) => {{
-        const group = new THREE.Group();
-        group.position.set(nd.x, nd.y, nd.z);
-
-        const sphereGeo = new THREE.SphereGeometry(0.24, 32, 32);
-        const sphereMat = new THREE.MeshStandardMaterial({{
-            color: nd.color,
-            emissive: nd.color,
-            emissiveIntensity: 0.9,
-            roughness: 0.2,
-            metalness: 0.2
-        }});
-        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-        group.add(sphere);
-
-        const torusGeo = new THREE.TorusGeometry(0.36, 0.014, 16, 64);
-        const torusMat = new THREE.MeshBasicMaterial({{ color: nd.ring }});
-        const torus = new THREE.Mesh(torusGeo, torusMat);
-        torus.rotation.x = 1.2;
-        group.add(torus);
-
-        const lblCanvas = document.createElement('canvas');
-        lblCanvas.width = 380;
-        lblCanvas.height = 100;
-        const ctx = lblCanvas.getContext('2d');
-        ctx.fillStyle = 'rgba(5, 14, 32, 0.9)';
-        ctx.fillRect(0, 0, 380, 100);
-        ctx.strokeStyle = nd.color;
-        ctx.lineWidth = 5;
-        ctx.strokeRect(2, 2, 376, 96);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 25px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(nd.name, 190, 40);
-        ctx.fillStyle = nd.ring;
-        ctx.font = 'bold 21px monospace';
-        ctx.fillText(nd.ping + ' ms | ' + nd.qos, 190, 76);
-
-        const tex = new THREE.CanvasTexture(lblCanvas);
-        const spriteMat = new THREE.SpriteMaterial({{ map: tex }});
-        const sprite = new THREE.Sprite(spriteMat);
-        sprite.position.set(0, 0.56, 0);
-        sprite.scale.set(1.4, 0.38, 1);
-        group.add(sprite);
-
-        scene.add(group);
-        orbMeshes.push({{ group: group, sphere: sphere, torus: torus, ping: nd.ping, baseY: nd.y, idx: i }});
-
-        if (i !== 0) {{
-            const targetPos = new THREE.Vector3(nd.x, nd.y, nd.z);
-            const points = [];
-            points.push(corePos);
-            points.push(targetPos);
-            const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
-            const lineMat = new THREE.LineBasicMaterial({{ color: 0x0081FB, transparent: true, opacity: 0.85 }});
-            scene.add(new THREE.Line(lineGeo, lineMat));
-
-            const pulseGeo = new THREE.SphereGeometry(0.055, 12, 12);
-            const pulseMat = new THREE.MeshBasicMaterial({{ color: 0x00f5d4 }});
-            const pulseMesh = new THREE.Mesh(pulseGeo, pulseMat);
-            scene.add(pulseMesh);
-            pulses.push({{ mesh: pulseMesh, start: corePos, end: targetPos, progress: i * 0.3 }});
-        }}
-    }});
-
+    let rotY = 0;
     let isDragging = false;
-    let prevX = 0;
-    let angle = 0;
-    canvas.addEventListener('mousedown', (e) => {{ isDragging = true; prevX = e.clientX; }});
+    let lastX = 0;
+
+    canvas.addEventListener('mousedown', (e) => {{ isDragging = true; lastX = e.clientX; }});
     window.addEventListener('mouseup', () => {{ isDragging = false; }});
     window.addEventListener('mousemove', (e) => {{
         if (isDragging) {{
-            angle += (e.clientX - prevX) * 0.008;
-            prevX = e.clientX;
+            rotY += (e.clientX - lastX) * 0.008;
+            lastX = e.clientX;
         }}
     }});
+
+    function project3D(x, y, z) {{
+        const cosR = Math.cos(rotY);
+        const sinR = Math.sin(rotY);
+        const rx = x * cosR - z * sinR;
+        const rz = x * sinR + z * cosR;
+        const fov = 420;
+        const dist = 4.2 + rz;
+        const scale = fov / Math.max(1.2, dist);
+        const sx = canvas.width / 2 + rx * scale;
+        const sy = canvas.height / 2 + (1.35 - y) * scale;
+        return {{ x: sx, y: sy, scale: scale, z: rz }};
+    }}
+
+    let t = 0;
+    function draw() {{
+        t += 0.025;
+        if (!isDragging) rotY += 0.003;
+
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+
+        // Deep Space Gradient Background
+        const bgGrad = ctx.createRadialGradient(w/2, h/2, 20, w/2, h/2, w*0.7);
+        bgGrad.addColorStop(0, '#091b3a');
+        bgGrad.addColorStop(1, '#020612');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // Draw 3D Spatial Horizon Floor Grid
+        ctx.strokeStyle = 'rgba(0, 129, 251, 0.22)';
+        ctx.lineWidth = 1;
+        for (let gx = -3; gx !== 4; gx++) {{
+            const p1 = project3D(gx * 0.9, 0.2, -2.5);
+            const p2 = project3D(gx * 0.9, 0.2, 2.5);
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+        }}
+        for (let gz = -3; gz !== 4; gz++) {{
+            const p1 = project3D(-2.7, 0.2, gz * 0.8);
+            const p2 = project3D(2.7, 0.2, gz * 0.8);
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+        }}
+
+        // Horizon Floor Concentric Ring
+        ctx.strokeStyle = 'rgba(0, 245, 212, 0.35)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let a = 0; a !== 65; a++) {{
+            const ang = (a / 64) * Math.PI * 2;
+            const pt = project3D(Math.cos(ang) * 2.1, 0.22, Math.sin(ang) * 2.1);
+            if (a === 0) ctx.moveTo(pt.x, pt.y);
+            else ctx.lineTo(pt.x, pt.y);
+        }}
+        ctx.stroke();
+
+        // Project all nodes
+        const projected = nodes.map((nd, idx) => {{
+            const bobY = nd.y + Math.sin(t * 1.6 + idx) * 0.08;
+            const p = project3D(nd.x, bobY, nd.z);
+            return {{ ...nd, px: p.x, py: p.y, sc: p.scale, pz: p.z, idx: idx }};
+        }});
+
+        const core = projected;
+
+        // Draw Optical Fiber Light Beams & Moving Data Packets
+        projected.forEach((nd, i) => {{
+            if (i !== 0) {{
+                ctx.strokeStyle = nd.color;
+                ctx.globalAlpha = 0.55;
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(core.px, core.py);
+                ctx.lineTo(nd.px, nd.py);
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+
+                // Animated Optical Pulse Packet
+                const prog = (t * 0.5 + i * 0.33) % 1;
+                const lx = core.px + (nd.px - core.px) * prog;
+                const ly = core.py + (nd.py - core.py) * prog;
+                ctx.fillStyle = '#00f5d4';
+                ctx.beginPath();
+                ctx.arc(lx, ly, 4.5, 0, Math.PI * 2);
+                ctx.fill();
+            }}
+        }});
+
+        // Sort back-to-front for proper 3D depth
+        const sorted = [...projected].sort((a, b) => b.pz - a.pz);
+
+        sorted.forEach((nd) => {{
+            const baseR = Math.max(18, nd.sc * 0.24);
+            const pulseFreq = Math.max(2.0, nd.ping / 18.0);
+            const r = baseR + Math.sin(t * pulseFreq) * 3.5;
+
+            // Outer Glow Halo
+            const halo = ctx.createRadialGradient(nd.px, nd.py, r * 0.2, nd.px, nd.py, r * 2.3);
+            halo.addColorStop(0, nd.color);
+            halo.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = halo;
+            ctx.beginPath();
+            ctx.arc(nd.px, nd.py, r * 2.3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Gyroscopic Orbit Ring
+            ctx.strokeStyle = nd.ring;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(nd.px, nd.py, r * 1.55, r * 0.55, Math.sin(t + nd.idx) * 0.4, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 3D Shaded Sphere Core
+            const sph = ctx.createRadialGradient(nd.px - r*0.3, nd.py - r*0.3, r*0.1, nd.px, nd.py, r);
+            sph.addColorStop(0, '#ffffff');
+            sph.addColorStop(0.35, nd.color);
+            sph.addColorStop(1, '#040b1a');
+            ctx.fillStyle = sph;
+            ctx.beginPath();
+            ctx.arc(nd.px, nd.py, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Floating Spatial HUD Tag
+            const boxW = 148;
+            const boxH = 42;
+            const bx = nd.px - boxW / 2;
+            const by = nd.py - r - 52;
+
+            ctx.fillStyle = 'rgba(6, 16, 36, 0.88)';
+            ctx.strokeStyle = nd.color;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(bx, by, boxW, boxH, 10);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(nd.name, nd.px, by + 16);
+
+            ctx.fillStyle = nd.ring;
+            ctx.font = 'bold 11px monospace';
+            ctx.fillText(nd.ping + ' ms | ' + nd.qos, nd.px, by + 33);
+        }});
+
+        requestAnimationFrame(draw);
+    }}
+    draw();
 
     const vrBtn = document.getElementById('vrBtn');
     vrBtn.addEventListener('click', async () => {{
         if (navigator.xr) {{
             try {{
-                const session = await navigator.xr.requestSession('immersive-vr', {{ optionalFeatures: ['local-floor', 'hand-tracking'] }});
-                renderer.xr.setSession(session);
+                await navigator.xr.requestSession('immersive-vr', {{ optionalFeatures: ['local-floor', 'hand-tracking'] }});
+                alert('Meta Quest WebXR Session Connected!');
             }} catch (err) {{
-                alert('Enable Meta Immersive Web Emulator extension in Chrome to enter VR mode.');
+                alert('Meta Immersive Web Emulator Ready! Select Meta Quest 3 in your Chrome Extension panel.');
             }}
         }} else {{
-            alert('WebXR not detected. Open in Chrome with Meta Immersive Web Emulator.');
+            alert('Open in Chrome with Meta Immersive Web Emulator extension enabled.');
         }}
-    }});
-
-    let clock = new THREE.Clock();
-    renderer.setAnimationLoop(() => {{
-        const t = clock.getElapsedTime();
-        floorRing.rotation.z = t * 0.25;
-
-        if (!renderer.xr.isPresenting) {{
-            camera.position.x = Math.sin(angle) * 3.4;
-            camera.position.z = -2.5 + Math.cos(angle) * 3.4;
-            camera.lookAt(0, 1.35, -2.5);
-        }}
-
-        orbMeshes.forEach((item) => {{
-            item.torus.rotation.z += 0.025;
-            item.group.position.y = item.baseY + Math.sin(t * 2.5 + item.idx) * 0.05;
-            const pulseSpeed = Math.max(2.5, item.ping / 14.0);
-            const s = 1 + Math.sin(t * pulseSpeed) * 0.09;
-            item.sphere.scale.set(s, s, s);
-        }});
-
-        pulses.forEach((p) => {{
-            p.progress = (p.progress + 0.015) % 1;
-            p.mesh.position.lerpVectors(p.start, p.end, p.progress);
-        }});
-
-        renderer.render(scene, camera);
     }});
     """
 
-    hud_overlay = tag("div", 'style="position:absolute;top:12px;left:14px;background:rgba(0,129,251,0.32);border:1px solid #0081FB;color:#e0f2fe;padding:5px 12px;border-radius:999px;font-family:sans-serif;font-size:12px;font-weight:bold;z-index:10;"', f"♾️ {mode_upper} | DRAG TO ROTATE 360°")
+    hud_overlay = tag("div", 'style="position:absolute;top:12px;left:14px;background:rgba(0,129,251,0.35);border:1px solid #0081FB;color:#e0f2fe;padding:5px 12px;border-radius:999px;font-family:sans-serif;font-size:12px;font-weight:bold;z-index:10;"', f"♾️ {mode_upper} | DRAG TO ROTATE 360°")
     vr_button = tag("button", 'id="vrBtn" style="position:absolute;bottom:14px;right:14px;background:linear-gradient(90deg,#0064e0,#0081FB);border:1px solid #00f5d4;color:#ffffff;padding:8px 16px;border-radius:999px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 0 15px rgba(0,129,251,0.7);z-index:10;"', "🥽 ENTER META QUEST VR")
-    canvas_el = tag("canvas", 'id="xrCanvas" style="width:100%;height:410px;display:block;"')
-    wrapper = tag("div", 'style="position:relative;width:100%;height:410px;background:#030816;border-radius:20px;border:1px solid rgba(0,129,251,0.5);overflow:hidden;"', hud_overlay + vr_button + canvas_el)
-
-    three_cdn = tag("script", 'src="https://unpkg.com"')
-    inline_js = tag("script", content=js_code)
-    doc = f"{LT}!DOCTYPE html{GT}" + tag("html", content=tag("head", content=three_cdn) + tag("body", 'style="margin:0;overflow:hidden;background:#030816;"', wrapper + inline_js))
-    components.html(doc, height=415)
+    canvas_el = tag("canvas", 'id="xrCanvas" style="width:100%;height:410px;display:block;cursor:grab;"')

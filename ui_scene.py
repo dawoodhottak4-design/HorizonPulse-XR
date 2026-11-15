@@ -25,6 +25,8 @@ def inject_horizon_css():
     css += ".agent-tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; margin-bottom: 5px; background: rgba(0, 245, 212, 0.2); color: #2dd4bf; border: 1px solid #00f5d4; }"
     css += "h1, h2, h3 { color: #38bdf8 !important; }"
     css += "div.stButton button { background: linear-gradient(90deg, #0064e0, #0081FB) !important; color: #ffffff !important; border: 1px solid #00f5d4 !important; border-radius: 999px !important; font-weight: 700 !important; }"
+    css += "div[data-testid='stMetricValue'] { color: #ffffff !important; font-weight: 700 !important; }"
+    css += "div[data-testid='stMetricLabel'] { color: #93c5fd !important; }"
     st.markdown(tag("style", content=css), unsafe_allow_html=True)
 
 def render_horizon_spatial_scene(devices, mode):
@@ -34,6 +36,7 @@ def render_horizon_spatial_scene(devices, mode):
         color, ring_color, _, _ = get_node_visuals(ping)
         cx, cy, cz = (float(v) for v in data["pos"].split())
         nodes_payload.append({
+            "id": idx,
             "name": name.replace("_", " "),
             "ping": ping,
             "qos": data["qos"],
@@ -53,7 +56,7 @@ def render_horizon_spatial_scene(devices, mode):
     const ctx = canvas.getContext('2d');
 
     function resize() {{
-        canvas.width = canvas.parentElement.clientWidth || 700;
+        canvas.width = canvas.parentElement.clientWidth || 720;
         canvas.height = 410;
     }}
     resize();
@@ -88,21 +91,19 @@ def render_horizon_spatial_scene(devices, mode):
     let t = 0;
     function draw() {{
         t += 0.025;
-        if (!isDragging) rotY += 0.003;
+        if (!isDragging) rotY += 0.004;
 
         const w = canvas.width;
         const h = canvas.height;
         ctx.clearRect(0, 0, w, h);
 
-        // Deep Space Gradient Background
-        const bgGrad = ctx.createRadialGradient(w/2, h/2, 20, w/2, h/2, w*0.7);
-        bgGrad.addColorStop(0, '#091b3a');
+        const bgGrad = ctx.createRadialGradient(w / 2, h / 2, 20, w / 2, h / 2, w * 0.7);
+        bgGrad.addColorStop(0, '#0a224a');
         bgGrad.addColorStop(1, '#020612');
         ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, w, h);
 
-        // Draw 3D Spatial Horizon Floor Grid
-        ctx.strokeStyle = 'rgba(0, 129, 251, 0.22)';
+        ctx.strokeStyle = 'rgba(0, 129, 251, 0.25)';
         ctx.lineWidth = 1;
         for (let gx = -3; gx !== 4; gx++) {{
             const p1 = project3D(gx * 0.9, 0.2, -2.5);
@@ -115,8 +116,7 @@ def render_horizon_spatial_scene(devices, mode):
             ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
         }}
 
-        // Horizon Floor Concentric Ring
-        ctx.strokeStyle = 'rgba(0, 245, 212, 0.35)';
+        ctx.strokeStyle = 'rgba(0, 245, 212, 0.4)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         for (let a = 0; a !== 65; a++) {{
@@ -127,64 +127,59 @@ def render_horizon_spatial_scene(devices, mode):
         }}
         ctx.stroke();
 
-        // Project all nodes
         const projected = nodes.map((nd, idx) => {{
             const bobY = nd.y + Math.sin(t * 1.6 + idx) * 0.08;
             const p = project3D(nd.x, bobY, nd.z);
-            return {{ ...nd, px: p.x, py: p.y, sc: p.scale, pz: p.z, idx: idx }};
+            return {{ id: nd.id, name: nd.name, ping: nd.ping, qos: nd.qos, color: nd.color, ring: nd.ring, px: p.x, py: p.y, sc: p.scale, pz: p.z }};
         }});
 
-        const core = projected;
+        const core = projected.find((item) => item.id === 0);
 
-        // Draw Optical Fiber Light Beams & Moving Data Packets
-        projected.forEach((nd, i) => {{
-            if (i !== 0) {{
-                ctx.strokeStyle = nd.color;
-                ctx.globalAlpha = 0.55;
-                ctx.lineWidth = 2.5;
-                ctx.beginPath();
-                ctx.moveTo(core.px, core.py);
-                ctx.lineTo(nd.px, nd.py);
-                ctx.stroke();
-                ctx.globalAlpha = 1.0;
+        if (core) {{
+            projected.forEach((nd) => {{
+                if (nd.id !== 0) {{
+                    ctx.strokeStyle = nd.color;
+                    ctx.globalAlpha = 0.65;
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.moveTo(core.px, core.py);
+                    ctx.lineTo(nd.px, nd.py);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1.0;
 
-                // Animated Optical Pulse Packet
-                const prog = (t * 0.5 + i * 0.33) % 1;
-                const lx = core.px + (nd.px - core.px) * prog;
-                const ly = core.py + (nd.py - core.py) * prog;
-                ctx.fillStyle = '#00f5d4';
-                ctx.beginPath();
-                ctx.arc(lx, ly, 4.5, 0, Math.PI * 2);
-                ctx.fill();
-            }}
-        }});
+                    const prog = (t * 0.5 + nd.id * 0.33) % 1;
+                    const lx = core.px + (nd.px - core.px) * prog;
+                    const ly = core.py + (nd.py - core.py) * prog;
+                    ctx.fillStyle = '#00f5d4';
+                    ctx.beginPath();
+                    ctx.arc(lx, ly, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }}
+            }});
+        }}
 
-        // Sort back-to-front for proper 3D depth
-        const sorted = [...projected].sort((a, b) => b.pz - a.pz);
+        const sorted = projected.slice().sort((a, b) => b.pz - a.pz);
 
         sorted.forEach((nd) => {{
-            const baseR = Math.max(18, nd.sc * 0.24);
+            const baseR = Math.max(20, nd.sc * 0.25);
             const pulseFreq = Math.max(2.0, nd.ping / 18.0);
             const r = baseR + Math.sin(t * pulseFreq) * 3.5;
 
-            // Outer Glow Halo
-            const halo = ctx.createRadialGradient(nd.px, nd.py, r * 0.2, nd.px, nd.py, r * 2.3);
+            const halo = ctx.createRadialGradient(nd.px, nd.py, r * 0.2, nd.px, nd.py, r * 2.4);
             halo.addColorStop(0, nd.color);
             halo.addColorStop(1, 'rgba(0,0,0,0)');
             ctx.fillStyle = halo;
             ctx.beginPath();
-            ctx.arc(nd.px, nd.py, r * 2.3, 0, Math.PI * 2);
+            ctx.arc(nd.px, nd.py, r * 2.4, 0, Math.PI * 2);
             ctx.fill();
 
-            // Gyroscopic Orbit Ring
             ctx.strokeStyle = nd.ring;
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2.2;
             ctx.beginPath();
-            ctx.ellipse(nd.px, nd.py, r * 1.55, r * 0.55, Math.sin(t + nd.idx) * 0.4, 0, Math.PI * 2);
+            ctx.ellipse(nd.px, nd.py, r * 1.55, r * 0.55, Math.sin(t + nd.id) * 0.4, 0, Math.PI * 2);
             ctx.stroke();
 
-            // 3D Shaded Sphere Core
-            const sph = ctx.createRadialGradient(nd.px - r*0.3, nd.py - r*0.3, r*0.1, nd.px, nd.py, r);
+            const sph = ctx.createRadialGradient(nd.px - r * 0.3, nd.py - r * 0.3, r * 0.1, nd.px, nd.py, r);
             sph.addColorStop(0, '#ffffff');
             sph.addColorStop(0.35, nd.color);
             sph.addColorStop(1, '#040b1a');
@@ -193,13 +188,12 @@ def render_horizon_spatial_scene(devices, mode):
             ctx.arc(nd.px, nd.py, r, 0, Math.PI * 2);
             ctx.fill();
 
-            // Floating Spatial HUD Tag
-            const boxW = 148;
-            const boxH = 42;
+            const boxW = 152;
+            const boxH = 44;
             const bx = nd.px - boxW / 2;
-            const by = nd.py - r - 52;
+            const by = nd.py - r - 54;
 
-            ctx.fillStyle = 'rgba(6, 16, 36, 0.88)';
+            ctx.fillStyle = 'rgba(6, 16, 36, 0.9)';
             ctx.strokeStyle = nd.color;
             ctx.lineWidth = 1.5;
             ctx.beginPath();
@@ -210,11 +204,11 @@ def render_horizon_spatial_scene(devices, mode):
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 11px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(nd.name, nd.px, by + 16);
+            ctx.fillText(nd.name, nd.px, by + 17);
 
             ctx.fillStyle = nd.ring;
             ctx.font = 'bold 11px monospace';
-            ctx.fillText(nd.ping + ' ms | ' + nd.qos, nd.px, by + 33);
+            ctx.fillText(nd.ping + ' ms | ' + nd.qos, nd.px, by + 35);
         }});
 
         requestAnimationFrame(draw);

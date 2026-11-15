@@ -1,6 +1,5 @@
 import streamlit as st
-import streamlit.components.v1 as components
-import json
+import math
 
 LT = chr(60)
 GT = chr(62)
@@ -12,11 +11,11 @@ def tag(name, attrs="", content=""):
 def get_node_visuals(ping_val):
     p_int = int(ping_val)
     if p_int in range(0, 31):
-        return "#0081FB", "#00f5d4", "2400", "🔵"
+        return "#0081FB", "#00f5d4", "2.4s", "🔵"
     elif p_int in range(31, 91):
-        return "#f59e0b", "#fde047", "900", "🟡"
+        return "#f59e0b", "#fde047", "1.0s", "🟡"
     else:
-        return "#ff0055", "#ff758f", "300", "🔴"
+        return "#ff0055", "#ff758f", "0.35s", "🔴"
 
 def inject_horizon_css():
     css = ".stApp { background: radial-gradient(circle at 15% 15%, #002b5b 0%, #050a18 45%, #02040a 100%); color: #f1f5f9; }"
@@ -27,209 +26,73 @@ def inject_horizon_css():
     css += "div.stButton button { background: linear-gradient(90deg, #0064e0, #0081FB) !important; color: #ffffff !important; border: 1px solid #00f5d4 !important; border-radius: 999px !important; font-weight: 700 !important; }"
     css += "div[data-testid='stMetricValue'] { color: #ffffff !important; font-weight: 700 !important; }"
     css += "div[data-testid='stMetricLabel'] { color: #93c5fd !important; }"
+    css += "@keyframes pulseOrb { 0%, 100% { transform: scale(1); opacity: 0.95; } 50% { transform: scale(1.12); opacity: 1; } }"
+    css += "@keyframes dashFlow { to { stroke-dashoffset: -40; } }"
+    css += ".opt-beam { stroke-dasharray: 8 6; animation: dashFlow 1.2s linear infinite; }"
     st.markdown(tag("style", content=css), unsafe_allow_html=True)
 
 def render_horizon_spatial_scene(devices, mode):
-    nodes_payload = []
+    coords_map = {
+        "Fiber_ONT_Core":   (350, 95),
+        "Quest_Spatial_UI": (145, 225),
+        "Horizon_Cinema":   (555, 225),
+        "Ambient_IoT_Mesh": (350, 305)
+    }
+
+    svg_parts = []
+    # Defs for 3D radial gradients & glow
+    g_bg = tag("radialGradient", 'id="spaceBg" cx="50%" cy="45%" r="65%"',
+               tag("stop", 'offset="0%" stop-color="#0b2859"') +
+               tag("stop", 'offset="100%" stop-color="#020612"'))
+    svg_parts.append(tag("defs", content=g_bg))
+
+    # Background + 3D Perspective Floor Grid
+    svg_parts.append(tag("rect", 'width="700" height="390" rx="18" fill="url(#spaceBg)" stroke="#0081FB" stroke-width="1.5"'))
+    svg_parts.append(tag("ellipse", 'cx="350" cy="275" rx="290" ry="88" fill="none" stroke="rgba(0,129,251,0.35)" stroke-width="1.5"'))
+    svg_parts.append(tag("ellipse", 'cx="350" cy="275" rx="195" ry="56" fill="none" stroke="rgba(0,245,212,0.35)" stroke-width="1.2" stroke-dasharray="6 4"'))
+    svg_parts.append(tag("line", 'x1="60" y1="275" x2="640" y2="275" stroke="rgba(0,129,251,0.22)" stroke-width="1"'))
+    svg_parts.append(tag("line", 'x1="350" y1="185" x2="350" y2="365" stroke="rgba(0,129,251,0.22)" stroke-width="1"'))
+
+    # Top Spatial HUD Pill inside 3D Room
+    svg_parts.append(tag("rect", 'x="18" y="16" width="330" height="28" rx="14" fill="rgba(0,129,251,0.28)" stroke="#0081FB" stroke-width="1"'))
+    svg_parts.append(tag("text", 'x="183" y="34" fill="#e0f2fe" font-family="sans-serif" font-size="11" font-weight="bold" text-anchor="middle"', f"♾️ {mode.upper()} | SPATIAL MESH"))
+
+    # Draw Optical Fiber Light Beams from Fiber_ONT_Core to other nodes
+    cx0, cy0 = coords_map["Fiber_ONT_Core"]
+    for name, data in devices.items():
+        if name != "Fiber_ONT_Core" and name in coords_map:
+            tx, ty = coords_map[name]
+            color, _, _, _ = get_node_visuals(float(data["ping"]))
+            svg_parts.append(tag("line", f'x1="{cx0}" y1="{cy0}" x2="{tx}" y2="{ty}" stroke="{color}" stroke-width="3" opacity="0.35"'))
+            svg_parts.append(tag("line", f'x1="{cx0}" y1="{cy0}" x2="{tx}" y2="{ty}" stroke="#00f5d4" stroke-width="2" class="opt-beam"'))
+
+    # Draw 3D Glowing Device Orbs
     for idx, (name, data) in enumerate(devices.items()):
         ping = float(data["ping"])
-        color, ring_color, _, _ = get_node_visuals(ping)
-        cx, cy, cz = (float(v) for v in data["pos"].split())
-        nodes_payload.append({
-            "id": idx,
-            "name": name.replace("_", " "),
-            "ping": ping,
-            "qos": data["qos"],
-            "color": color,
-            "ring": ring_color,
-            "x": cx,
-            "y": cy,
-            "z": cz + 2.5
-        })
+        color, ring_color, dur, _ = get_node_visuals(ping)
+        nx, ny = coords_map.get(name, (350, 200))
+        grad_id = f"orbGrad_{idx}"
 
-    nodes_json = json.dumps(nodes_payload)
-    mode_upper = mode.upper()
+        orb_grad = tag("radialGradient", f'id="{grad_id}" cx="35%" cy="30%" r="70%"',
+                       tag("stop", 'offset="0%" stop-color="#ffffff"') +
+                       tag("stop", f'offset="35%" stop-color="{color}"') +
+                       tag("stop", 'offset="100%" stop-color="#030816"'))
+        svg_parts.append(tag("defs", content=orb_grad))
 
-    js_code = f"""
-    const nodes = {nodes_json};
-    const canvas = document.getElementById('xrCanvas');
-    const ctx = canvas.getContext('2d');
+        # Outer Halo + Gyroscopic Ring + 3D Sphere
+        svg_parts.append(tag("circle", f'cx="{nx}" cy="{ny}" r="42" fill="{color}" opacity="0.18"'))
+        svg_parts.append(tag("ellipse", f'cx="{nx}" cy="{ny}" rx="38" ry="13" fill="none" stroke="{ring_color}" stroke-width="1.8" transform="rotate(-14 {nx} {ny})"'))
+        svg_parts.append(tag("circle", f'cx="{nx}" cy="{ny}" r="22" fill="url(#{grad_id})" stroke="{ring_color}" stroke-width="1.5"'))
 
-    function resize() {{
-        canvas.width = canvas.parentElement.clientWidth || 720;
-        canvas.height = 410;
-    }}
-    resize();
-    window.addEventListener('resize', resize);
+        # Floating Glass Label Badge above Orb
+        lbl_y = ny - 58
+        svg_parts.append(tag("rect", f'x="{nx - 76}" y="{lbl_y}" width="152" height="36" rx="9" fill="rgba(5,14,32,0.9)" stroke="{color}" stroke-width="1.3"'))
+        svg_parts.append(tag("text", f'x="{nx}" y="{lbl_y + 15}" fill="#ffffff" font-family="sans-serif" font-size="11" font-weight="bold" text-anchor="middle"', name.replace("_", " ")))
+        svg_parts.append(tag("text", f'x="{nx}" y="{lbl_y + 29}" fill="{ring_color}" font-family="monospace" font-size="10.5" font-weight="bold" text-anchor="middle"', f"{ping} ms | {data['qos']}"))
 
-    let rotY = 0;
-    let isDragging = false;
-    let lastX = 0;
+    # Bottom Right Meta Quest XR Ready Badge
+    svg_parts.append(tag("rect", 'x="485" y="346" width="195" height="30" rx="15" fill="rgba(0,129,251,0.35)" stroke="#00f5d4" stroke-width="1.2"'))
+    svg_parts.append(tag("text", 'x="582" y="365" fill="#ffffff" font-family="sans-serif" font-size="11" font-weight="bold" text-anchor="middle"', "🥽 META HORIZON XR READY"))
 
-    canvas.addEventListener('mousedown', (e) => {{ isDragging = true; lastX = e.clientX; }});
-    window.addEventListener('mouseup', () => {{ isDragging = false; }});
-    window.addEventListener('mousemove', (e) => {{
-        if (isDragging) {{
-            rotY += (e.clientX - lastX) * 0.008;
-            lastX = e.clientX;
-        }}
-    }});
-
-    function project3D(x, y, z) {{
-        const cosR = Math.cos(rotY);
-        const sinR = Math.sin(rotY);
-        const rx = x * cosR - z * sinR;
-        const rz = x * sinR + z * cosR;
-        const fov = 420;
-        const dist = 4.2 + rz;
-        const scale = fov / Math.max(1.2, dist);
-        const sx = canvas.width / 2 + rx * scale;
-        const sy = canvas.height / 2 + (1.35 - y) * scale;
-        return {{ x: sx, y: sy, scale: scale, z: rz }};
-    }}
-
-    let t = 0;
-    function draw() {{
-        t += 0.025;
-        if (!isDragging) rotY += 0.004;
-
-        const w = canvas.width;
-        const h = canvas.height;
-        ctx.clearRect(0, 0, w, h);
-
-        const bgGrad = ctx.createRadialGradient(w / 2, h / 2, 20, w / 2, h / 2, w * 0.7);
-        bgGrad.addColorStop(0, '#0a224a');
-        bgGrad.addColorStop(1, '#020612');
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, w, h);
-
-        ctx.strokeStyle = 'rgba(0, 129, 251, 0.25)';
-        ctx.lineWidth = 1;
-        for (let gx = -3; gx !== 4; gx++) {{
-            const p1 = project3D(gx * 0.9, 0.2, -2.5);
-            const p2 = project3D(gx * 0.9, 0.2, 2.5);
-            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-        }}
-        for (let gz = -3; gz !== 4; gz++) {{
-            const p1 = project3D(-2.7, 0.2, gz * 0.8);
-            const p2 = project3D(2.7, 0.2, gz * 0.8);
-            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-        }}
-
-        ctx.strokeStyle = 'rgba(0, 245, 212, 0.4)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let a = 0; a !== 65; a++) {{
-            const ang = (a / 64) * Math.PI * 2;
-            const pt = project3D(Math.cos(ang) * 2.1, 0.22, Math.sin(ang) * 2.1);
-            if (a === 0) ctx.moveTo(pt.x, pt.y);
-            else ctx.lineTo(pt.x, pt.y);
-        }}
-        ctx.stroke();
-
-        const projected = nodes.map((nd, idx) => {{
-            const bobY = nd.y + Math.sin(t * 1.6 + idx) * 0.08;
-            const p = project3D(nd.x, bobY, nd.z);
-            return {{ id: nd.id, name: nd.name, ping: nd.ping, qos: nd.qos, color: nd.color, ring: nd.ring, px: p.x, py: p.y, sc: p.scale, pz: p.z }};
-        }});
-
-        const core = projected.find((item) => item.id === 0);
-
-        if (core) {{
-            projected.forEach((nd) => {{
-                if (nd.id !== 0) {{
-                    ctx.strokeStyle = nd.color;
-                    ctx.globalAlpha = 0.65;
-                    ctx.lineWidth = 2.5;
-                    ctx.beginPath();
-                    ctx.moveTo(core.px, core.py);
-                    ctx.lineTo(nd.px, nd.py);
-                    ctx.stroke();
-                    ctx.globalAlpha = 1.0;
-
-                    const prog = (t * 0.5 + nd.id * 0.33) % 1;
-                    const lx = core.px + (nd.px - core.px) * prog;
-                    const ly = core.py + (nd.py - core.py) * prog;
-                    ctx.fillStyle = '#00f5d4';
-                    ctx.beginPath();
-                    ctx.arc(lx, ly, 5, 0, Math.PI * 2);
-                    ctx.fill();
-                }}
-            }});
-        }}
-
-        const sorted = projected.slice().sort((a, b) => b.pz - a.pz);
-
-        sorted.forEach((nd) => {{
-            const baseR = Math.max(20, nd.sc * 0.25);
-            const pulseFreq = Math.max(2.0, nd.ping / 18.0);
-            const r = baseR + Math.sin(t * pulseFreq) * 3.5;
-
-            const halo = ctx.createRadialGradient(nd.px, nd.py, r * 0.2, nd.px, nd.py, r * 2.4);
-            halo.addColorStop(0, nd.color);
-            halo.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = halo;
-            ctx.beginPath();
-            ctx.arc(nd.px, nd.py, r * 2.4, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.strokeStyle = nd.ring;
-            ctx.lineWidth = 2.2;
-            ctx.beginPath();
-            ctx.ellipse(nd.px, nd.py, r * 1.55, r * 0.55, Math.sin(t + nd.id) * 0.4, 0, Math.PI * 2);
-            ctx.stroke();
-
-            const sph = ctx.createRadialGradient(nd.px - r * 0.3, nd.py - r * 0.3, r * 0.1, nd.px, nd.py, r);
-            sph.addColorStop(0, '#ffffff');
-            sph.addColorStop(0.35, nd.color);
-            sph.addColorStop(1, '#040b1a');
-            ctx.fillStyle = sph;
-            ctx.beginPath();
-            ctx.arc(nd.px, nd.py, r, 0, Math.PI * 2);
-            ctx.fill();
-
-            const boxW = 152;
-            const boxH = 44;
-            const bx = nd.px - boxW / 2;
-            const by = nd.py - r - 54;
-
-            ctx.fillStyle = 'rgba(6, 16, 36, 0.9)';
-            ctx.strokeStyle = nd.color;
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.roundRect(bx, by, boxW, boxH, 10);
-            ctx.fill();
-            ctx.stroke();
-
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 11px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(nd.name, nd.px, by + 17);
-
-            ctx.fillStyle = nd.ring;
-            ctx.font = 'bold 11px monospace';
-            ctx.fillText(nd.ping + ' ms | ' + nd.qos, nd.px, by + 35);
-        }});
-
-        requestAnimationFrame(draw);
-    }}
-    draw();
-
-    const vrBtn = document.getElementById('vrBtn');
-    vrBtn.addEventListener('click', async () => {{
-        if (navigator.xr) {{
-            try {{
-                await navigator.xr.requestSession('immersive-vr', {{ optionalFeatures: ['local-floor', 'hand-tracking'] }});
-                alert('Meta Quest WebXR Session Connected!');
-            }} catch (err) {{
-                alert('Meta Immersive Web Emulator Ready! Select Meta Quest 3 in your Chrome Extension panel.');
-            }}
-        }} else {{
-            alert('Open in Chrome with Meta Immersive Web Emulator extension enabled.');
-        }}
-    }});
-    """
-
-    hud_overlay = tag("div", 'style="position:absolute;top:12px;left:14px;background:rgba(0,129,251,0.35);border:1px solid #0081FB;color:#e0f2fe;padding:5px 12px;border-radius:999px;font-family:sans-serif;font-size:12px;font-weight:bold;z-index:10;"', f"♾️ {mode_upper} | DRAG TO ROTATE 360°")
-    vr_button = tag("button", 'id="vrBtn" style="position:absolute;bottom:14px;right:14px;background:linear-gradient(90deg,#0064e0,#0081FB);border:1px solid #00f5d4;color:#ffffff;padding:8px 16px;border-radius:999px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 0 15px rgba(0,129,251,0.7);z-index:10;"', "🥽 ENTER META QUEST VR")
-    canvas_el = tag("canvas", 'id="xrCanvas" style="width:100%;height:410px;display:block;cursor:grab;"')
+    svg_full = tag("svg", 'viewBox="0 0 700 390" style="width:100%;height:auto;border-radius:18px;box-shadow:0 10px 35px rgba(0,129,251,0.28);"', "".join(svg_parts))
+    st.markdown(svg_full, unsafe_allow_html=True)
